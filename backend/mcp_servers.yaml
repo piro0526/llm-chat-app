@@ -1,0 +1,68 @@
+mcp_servers:
+  # Filesystem server for document management
+  filesystem:
+    command: ["uvx", "mcp-server-filesystem"]
+    args: ["/tmp/mcp-workspace"]
+    description: "File system operations for document management"
+    enabled: true
+    env:
+      ALLOWED_DIRECTORIES: "/tmp/mcp-workspace,/home/documents"
+    
+  # Brave search for web search capabilities  
+  brave_search:
+    command: ["uvx", "mcp-server-brave-search"]
+    args: []
+    description: "Web search using Brave Search API"
+    enabled: false
+    env:
+      BRAVE_SEARCH_API_KEY: "your-brave-api-key-here"
+    
+  # Git operations for version control
+  git:
+    command: ["uvx", "mcp-server-git"]
+    args: []
+    description: "Git version control operations"
+    enabled: true
+    env:
+      GIT_ALLOWED_REPOS: "/tmp/mcp-workspace"
+    
+  # SQLite database operations
+  sqlite:
+    command: ["uvx", "mcp-server-sqlite"]
+    args: []
+    description: "SQLite database operations"
+    enabled: false
+    env:
+      SQLITE_ALLOWED_DBS: "/tmp/databases"
+    
+  # Time/clock operations
+  time:
+    command: ["uvx", "mcp-server-time"]
+    args: []
+    description: "Time and date operations"
+    enabled: true
+    env: {}
+    
+  # Google Drive integration
+  gdrive:
+    command: ["uvx", "mcp-server-gdrive"]
+    args: []
+    description: "Google Drive file operations"
+    enabled: false
+    env:
+      GOOGLE_DRIVE_CREDENTIALS_PATH: "/path/to/credentials.json"
+    
+  # Sequential thinking for complex reasoning
+  sequential_thinking:
+    command: ["uvx", "mcp-server-sequential-thinking"]
+    args: []
+    description: "Sequential thinking and reasoning assistance"
+    enabled: true
+    env: {}
+
+# Global MCP settings
+global_settings:
+  max_servers: 5
+  timeout_seconds: 30
+  retry_attempts: 3
+  workspace_directory: "/tmp/mcp-workspace"
