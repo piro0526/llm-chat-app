@@ -10,7 +10,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
 
-from mcp import get_mcp_tools
+from mcp_host import get_mcp_tools_for_llm
 
 
 class State(TypedDict):
@@ -78,7 +78,7 @@ class LLMService:
             model = self.get_model(provider, api_key, model_name)
 
             # Get MCP tools
-            mcp_tools = get_mcp_tools()
+            mcp_tools = await get_mcp_tools_for_llm()
 
             # Combine provided tools with MCP tools
             all_tools = (tools or []) + mcp_tools

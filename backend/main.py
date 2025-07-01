@@ -13,26 +13,28 @@ async def lifespan(app: FastAPI):
     # Create database tables
     Base.metadata.create_all(bind=engine)
 
-    # Initialize MCP (placeholder)
+    # Initialize MCP clients
     try:
-        from mcp import initialize_mcp
+        from mcp_clients.client_manager import initialize_mcp_clients
 
-        success = initialize_mcp()
+        success = await initialize_mcp_clients()
         if success:
-            print("MCP initialization ready (no servers configured)")
+            print("MCP clients initialized successfully")
+        else:
+            print("Warning: MCP clients initialization failed")
     except Exception as e:
-        print(f"Warning: Failed to initialize MCP: {e}")
+        print(f"Warning: Failed to initialize MCP clients: {e}")
 
     yield
 
-    # Cleanup MCP connections
+    # Cleanup MCP clients
     try:
-        from mcp import cleanup_mcp
+        from mcp_clients.client_manager import cleanup_mcp_clients
 
-        cleanup_mcp()
-        print("MCP cleanup completed")
+        await cleanup_mcp_clients()
+        print("MCP clients cleanup completed")
     except Exception as e:
-        print(f"Warning: Failed to cleanup MCP: {e}")
+        print(f"Warning: Failed to cleanup MCP clients: {e}")
 
 
 app = FastAPI(

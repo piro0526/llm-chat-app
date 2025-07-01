@@ -1,0 +1,22 @@
+{
+  "servers": {
+    "time-server": {
+      "type": "time",
+      "enabled": true,
+      "server_path": "/app/servers/time_server.py",
+      "description": "MCP-compliant time operations server with timezone support",
+      "capabilities": [
+        "get_current_time",
+        "convert_time", 
+        "time_difference",
+        "list_timezones"
+      ]
+    }
+  },
+  "global_settings": {
+    "startup_timeout": 10,
+    "health_check_interval": 60,
+    "max_retries": 3,
+    "log_level": "INFO"
+  }
+}

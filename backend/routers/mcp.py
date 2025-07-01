@@ -7,7 +7,8 @@ from models import User
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from mcp import get_mcp_tools
+from mcp_host import get_mcp_tools_for_llm
+from mcp_clients.client_manager import get_mcp_manager
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ class MCPServerConfig(BaseModel):
 async def get_available_tools(current_user: User = Depends(get_current_user)):
     """Get all available MCP tools"""
     try:
-        tools = get_mcp_tools()
+        tools = await get_mcp_tools_for_llm()
 
         # Convert LangChain tools to API format
         all_tools = []
@@ -64,9 +65,9 @@ async def get_available_tools(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/tools/{tool_name}")
-def get_tool_details(tool_name: str, current_user: User = Depends(get_current_user)):
+async def get_tool_details(tool_name: str, current_user: User = Depends(get_current_user)):
     """Get details for a specific tool"""
-    tools = get_mcp_tools()
+    tools = await get_mcp_tools_for_llm()
     tool = next((t for t in tools if t.name == tool_name), None)
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")
@@ -84,7 +85,7 @@ def get_tool_details(tool_name: str, current_user: User = Depends(get_current_us
 async def execute_tool(request: ToolExecutionRequest, current_user: User = Depends(get_current_user)):
     """Execute an MCP tool"""
     try:
-        tools = get_mcp_tools()
+        tools = await get_mcp_tools_for_llm()
         tool = next((t for t in tools if t.name == request.tool_name), None)
 
         if not tool:
@@ -109,12 +110,27 @@ async def configure_mcp_server(config: MCPServerConfig, current_user: User = Dep
 @router.get("/servers/status")
 async def get_mcp_servers_status(current_user: User = Depends(get_current_user)):
     """Get status of MCP servers"""
-    tools = get_mcp_tools()
-    return {
-        "summary": {"total_servers": 0, "running_servers": 0, "enabled_servers": 0, "total_tools": len(tools)},
-        "servers": {},
-        "message": "No MCP servers configured",
-    }
+    try:
+        manager = await get_mcp_manager()
+        status = await manager.get_status()
+        tools = await get_mcp_tools_for_llm()
+        
+        return {
+            "summary": {
+                "total_servers": status["total_servers"],
+                "running_servers": status["connected_clients"],
+                "enabled_servers": status["healthy_clients"],
+                "total_tools": len(tools)
+            },
+            "servers": status["clients"],
+            "message": f"MCP system running with {status['connected_clients']} connected clients"
+        }
+    except Exception as e:
+        return {
+            "summary": {"total_servers": 0, "running_servers": 0, "enabled_servers": 0, "total_tools": 0},
+            "servers": {},
+            "message": f"Error getting MCP status: {str(e)}",
+        }
 
 
 @router.post("/servers/{server_name}/start")
