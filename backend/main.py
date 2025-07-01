@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize MCP (placeholder)
     try:
-        from backend.mcp import initialize_mcp
+        from mcp import initialize_mcp
 
         success = initialize_mcp()
         if success:
@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup MCP connections
     try:
-        from backend.mcp import cleanup_mcp
+        from mcp import cleanup_mcp
 
         cleanup_mcp()
         print("MCP cleanup completed")

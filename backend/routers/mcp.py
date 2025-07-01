@@ -7,7 +7,7 @@ from models import User
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.mcp import get_mcp_tools
+from mcp import get_mcp_tools
 
 router = APIRouter()
 

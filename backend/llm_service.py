@@ -1,19 +1,26 @@
-from typing import Optional
+from typing import Annotated, Optional, Sequence
 
 from config import settings
-from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
+from typing_extensions import TypedDict
 
-from backend.mcp import get_mcp_tools
+from mcp import get_mcp_tools
+
+
+class State(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
 class LLMService:
     def __init__(self):
         self.models = {}
+        self.graphs = {}
 
     def get_model(self, provider: str, api_key: Optional[str] = None, model_name: Optional[str] = None):
         """Get LLM model instance based on provider"""
@@ -30,6 +37,33 @@ class LLMService:
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
+    def create_graph(self, model, tools):
+        """Create LangGraph workflow"""
+        def should_continue(state: State) -> str:
+            messages = state["messages"]
+            last_message = messages[-1]
+            if last_message.tool_calls:
+                return "tools"
+            return END
+
+        def call_model(state: State):
+            messages = state["messages"]
+            response = model.invoke(messages)
+            return {"messages": [response]}
+
+        workflow = StateGraph(State)
+        workflow.add_node("agent", call_model)
+        if tools:
+            workflow.add_node("tools", ToolNode(tools))
+            workflow.add_edge(START, "agent")
+            workflow.add_conditional_edges("agent", should_continue, ["tools", END])
+            workflow.add_edge("tools", "agent")
+        else:
+            workflow.add_edge(START, "agent")
+            workflow.add_edge("agent", END)
+
+        return workflow.compile()
+
     async def generate_response(
         self,
         message: str,
@@ -39,9 +73,26 @@ class LLMService:
         chat_history: Optional[list] = None,
         tools: Optional[list] = None,
     ) -> str:
-        """Generate response from LLM with MCP tool integration"""
+        """Generate response from LLM with MCP tool integration using LangGraph"""
         try:
             model = self.get_model(provider, api_key, model_name)
+
+            # Get MCP tools
+            mcp_tools = get_mcp_tools()
+
+            # Combine provided tools with MCP tools
+            all_tools = (tools or []) + mcp_tools
+
+            # Bind tools to model if available
+            if all_tools:
+                model = model.bind_tools(all_tools)
+
+            # Create or get cached graph
+            graph_key = f"{provider}_{model_name}_{len(all_tools)}"
+            if graph_key not in self.graphs:
+                self.graphs[graph_key] = self.create_graph(model, all_tools)
+            
+            graph = self.graphs[graph_key]
 
             # Prepare messages
             messages = []
@@ -55,6 +106,7 @@ class LLMService:
             )
             messages.append(SystemMessage(content=system_msg))
 
+            # Add chat history
             if chat_history:
                 for log in chat_history:
                     if log.role == "user":
@@ -62,44 +114,15 @@ class LLMService:
                     else:
                         messages.append(AIMessage(content=log.content))
 
+            # Add current message
             messages.append(HumanMessage(content=message))
 
-            # TODO: mcpに対応したツールを追加する
-            # Get MCP tools
-            mcp_tools = get_mcp_tools()
-
-            # Combine provided tools with MCP tools
-            all_tools = (tools or []) + mcp_tools
-
-            if all_tools:
-                # Use tool calling agent for OpenAI
-                prompt = ChatPromptTemplate.from_messages(
-                    [
-                        ("system", system_msg),
-                        ("placeholder", "{chat_history}"),
-                        ("human", "{input}"),
-                        ("placeholder", "{agent_scratchpad}"),
-                    ]
-                )
-
-                agent = create_tool_calling_agent(model, all_tools, prompt)
-                agent_executor = AgentExecutor(agent=agent, tools=all_tools, verbose=True)
-
-                # Prepare chat history for agent
-                chat_history_msgs = []
-                if chat_history:
-                    for log in chat_history:
-                        if log.role == "user":
-                            chat_history_msgs.append(HumanMessage(content=log.content))
-                        else:
-                            chat_history_msgs.append(AIMessage(content=log.content))
-
-                response = await agent_executor.ainvoke({"input": message, "chat_history": chat_history_msgs})
-                return response["output"]
-            else:
-                # No tools, direct model invocation
-                response_msg = await model.ainvoke(messages)
-                return response_msg.content
+            # Execute the graph
+            result = await graph.ainvoke({"messages": messages})
+            
+            # Extract the final response
+            final_message = result["messages"][-1]
+            return final_message.content
 
         except Exception as e:
             raise Exception(f"Error generating response: {str(e)}")

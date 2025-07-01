@@ -5,10 +5,20 @@ services:
       POSTGRES_DB: llm_chat_app
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - /dev/shm:/dev/shm
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d llm_chat_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    shm_size: 256mb
 
   backend:
     build: 
@@ -18,11 +28,19 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/llm_chat_app
+      ENVIRONMENT: development
+      DOCKER_ENV: "true"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      sh -c "python database_init.py &&
+             alembic revision --autogenerate -m 'initial_migration' || true &&
+             alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

@@ -58,7 +58,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         db.commit()
 
         # Get available MCP tools
-        from backend.mcp import get_mcp_tools
+        from mcp import get_mcp_tools
 
         mcp_tools = get_mcp_tools()
 
